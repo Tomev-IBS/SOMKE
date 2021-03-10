@@ -3,42 +3,49 @@
 //
 
 #include <iostream>
+#include <random>
 
 #include "../include/SOMKE/SOMKEAlgorithm.h"
 
-SOMKEAlgorithm::SOMKEAlgorithm(vector<Point> *divergence_domain, KernelPtr kernel, unsigned int neurons_number, unsigned int epochs_number, unsigned int data_window_size)
+SOMKEAlgorithm::SOMKEAlgorithm(vector<Point> *divergence_domain, KernelPtr kernel, unsigned int neurons_number,
+                               unsigned int epochs_number, unsigned int data_window_size, unsigned int max_number_of_som_sequences)
   : neurons_number_(neurons_number), epochs_number_(epochs_number), kernel_ptr_(kernel),
-  divergence_domain_(divergence_domain), data_window_size_(data_window_size)
+  divergence_domain_(divergence_domain), data_window_size_(data_window_size), max_number_of_som_sequences_(max_number_of_som_sequences)
 { }
 
 void SOMKEAlgorithm::PerformStep(Point data_point) {
   data_window_.push_back(data_point);
 
   if(data_window_.size() == data_window_size_){
-    AddNewSOMSequence(data_window_);
+    AddNewSOMSequenceEntry(data_window_);
     data_window_.clear();
   }
 
-  // TODO Merge
+  // We're implementing only fixed memory strategy for now.
+  if(som_sequence_.size() > max_number_of_som_sequences_){
+    MergeMostSimilarSOMSequenceEntries();
+  }
+
 }
 
-void SOMKEAlgorithm::AddNewSOMSequence(vector<Point> data_window) {
+void SOMKEAlgorithm::AddNewSOMSequenceEntry(vector<Point> data_window) {
 
   ++data_window_iterator_;
 
-  som_sequences_.push_back(SOMSequence());
+  som_sequence_.push_back(SOMSequenceEntry());
 
-  som_sequences_.back().net = GenerateNetwork(data_window);
-  TrainNetwork(&(som_sequences_.back().net), data_window);
+  som_sequence_.back().net = GenerateNetwork(data_window);
+  TrainNetwork(&(som_sequence_.back().net), data_window);
 
-  som_sequences_.back().voronoi_regions = ComputeVoronoiRegionsForNeurons(som_sequences_.back().net, data_window);
-  som_sequences_.back().range = std::pair<int, int>(data_window_iterator_, data_window_iterator_);
+  som_sequence_.back().voronoi_regions = ComputeVoronoiRegionWeightsForNeurons(som_sequence_.back().net, data_window);
+  som_sequence_.back().range = std::pair<int, int>(data_window_iterator_, data_window_iterator_);
 
-  som_sequences_.back().kl_divergence = 0;
+  som_sequence_.back().kl_divergence = 0;
 
-  if(som_sequences_.size() > 1){
-    int i = som_sequences_.size() - 1;
-    som_sequences_.back().kl_divergence = ComputeDivergenceBetweenSOMSequences(som_sequences_[i], som_sequences_[i - 1]);
+  if(som_sequence_.size() > 1){
+    int i = som_sequence_.size() - 1;
+    som_sequence_.back().kl_divergence = ComputeDivergenceBetweenSOMSequences(som_sequence_[i],
+                                                                              som_sequence_[i - 1]);
   }
 }
 
@@ -76,7 +83,7 @@ void SOMKEAlgorithm::TrainNetwork(KohonenNetwork *net,
   //I can modify weights of each neuron via: (*net).objects[0][0].weights = {2.22};
 }
 
-vector<int> SOMKEAlgorithm::ComputeVoronoiRegionsForNeurons(const KohonenNetwork &net, const vector<Point> &data_window) {
+vector<int> SOMKEAlgorithm::ComputeVoronoiRegionWeightsForNeurons(const KohonenNetwork &net, const vector<Point> &data_window) {
   vector<int> voronoi_regions = {};
 
   while(voronoi_regions.size() < neurons_number_){
@@ -109,8 +116,8 @@ vector<int> SOMKEAlgorithm::ComputeVoronoiRegionsForNeurons(const KohonenNetwork
   return voronoi_regions;
 }
 
-double SOMKEAlgorithm::ComputeDivergenceBetweenSOMSequences(const SOMSequence &som_sequence1,
-                                                            const SOMSequence &som_sequence2) {
+double SOMKEAlgorithm::ComputeDivergenceBetweenSOMSequences(const SOMSequenceEntry &som_sequence1,
+                                                            const SOMSequenceEntry &som_sequence2) {
   // Compute PDFs on divergence domain
   auto pdf1 = ComputePDFValuesForDivergenceComputation(som_sequence1, divergence_domain_);
   auto pdf2 = ComputePDFValuesForDivergenceComputation(som_sequence2, divergence_domain_);
@@ -118,7 +125,7 @@ double SOMKEAlgorithm::ComputeDivergenceBetweenSOMSequences(const SOMSequence &s
   return ComputeKLDivergenceEstimatorBetweenPDFs(pdf1, pdf2);
 }
 
-vector<double> SOMKEAlgorithm::ComputePDFValuesForDivergenceComputation(const SOMSequence &som_sequence, vector<Point> *domain) {
+vector<double> SOMKEAlgorithm::ComputePDFValuesForDivergenceComputation(const SOMSequenceEntry &som_sequence, vector<Point> *domain) {
   vector<double> pdf = {};
 
   // Do note we start from i = 1. This is related to formula (20) from SOMKE work.
@@ -130,7 +137,7 @@ vector<double> SOMKEAlgorithm::ComputePDFValuesForDivergenceComputation(const SO
   return pdf;
 }
 
-double SOMKEAlgorithm::ComputePDFValueAtPointFromSOMSequence(const SOMSequence &som_sequence, const Point &pt) {
+double SOMKEAlgorithm::ComputePDFValueAtPointFromSOMSequence(const SOMSequenceEntry &som_sequence, const Point &pt) {
 
   double pdf_value = 0;
   int cs_sum = std::accumulate(som_sequence.voronoi_regions.begin(), som_sequence.voronoi_regions.end(), 0);
@@ -160,6 +167,135 @@ double SOMKEAlgorithm::ComputeKLDivergenceEstimatorBetweenPDFs(const vector<doub
 
   return divergence_estimator;
 }
+
+void SOMKEAlgorithm::MergeMostSimilarSOMSequenceEntries() {
+
+  auto i = FindIndexOfSOMSequenceEntryWithLowestModifiedDivergence();
+
+  SOMSequenceEntry merged_entry;
+
+  vector<SOMSequenceEntry> entries_to_merge = {som_sequence_[i], som_sequence_[i - 1]};
+
+  auto neuron_weights = GetNeuronWeightsFromEntries(entries_to_merge);
+  auto voronoi_region_weights = GetVoronoiRegionWeightsFromEntries(entries_to_merge);
+
+  auto data_window = DrawTrainingDataFromWeightsAndVoronoiRegions(neuron_weights, voronoi_region_weights);
+
+  merged_entry.net = GenerateNetwork(data_window);
+  TrainNetwork(&(merged_entry.net), data_window);
+
+  merged_entry.range = std::pair<int, int>(std::min(entries_to_merge[0].range.first, entries_to_merge[1].range.first),
+                                           std::max(entries_to_merge[0].range.second, entries_to_merge[1].range.second));
+
+  // Computing merged voronoi region weights
+  merged_entry.voronoi_regions = {};
+  while(merged_entry.voronoi_regions.size() < neurons_number_){
+    merged_entry.voronoi_regions.push_back(0);
+  }
+
+  DistanceFunction distance_function;
+
+  for(size_t j = 0; j < neuron_weights.size(); ++j){
+    auto neuron_weight = neuron_weights[j];
+    int closest_neuron_index = 0;
+    double distance_to_closest_neuron = distance_function(neuron_weight, merged_entry.net.objects[0][0].weights);
+
+    for(size_t i = 1; i < merged_entry.net.objects[0].size(); ++i){
+      double current_distance = distance_function(neuron_weight, merged_entry.net.objects[0][i].weights);
+      if(current_distance < distance_to_closest_neuron){
+        distance_to_closest_neuron = current_distance;
+        closest_neuron_index = i;
+      }
+    }
+
+    merged_entry.voronoi_regions[closest_neuron_index] += voronoi_region_weights[j];
+  }
+
+  merged_entry.kl_divergence = 0;
+
+  // Removing merged entries.
+  som_sequence_.erase(som_sequence_.begin() + i - 1);
+  som_sequence_.erase(som_sequence_.begin() + i - 1);
+
+  // Adding merged one to the sequence at a proper place.
+  SOMSequenceEntry *merged_entry_ptr = &merged_entry; // For convenience
+  som_sequence_.insert(som_sequence_.begin() + i - 1, merged_entry);
+
+  // Updating divergences.
+  if(i > 1){
+    merged_entry_ptr->kl_divergence = ComputeDivergenceBetweenSOMSequences(merged_entry, som_sequence_[i - 2]);
+  }
+
+  if(i < som_sequence_.size()){
+    merged_entry_ptr->kl_divergence = ComputeDivergenceBetweenSOMSequences(merged_entry, som_sequence_[i]);
+  }
+
+}
+
+unsigned int SOMKEAlgorithm::FindIndexOfSOMSequenceEntryWithLowestModifiedDivergence() {
+
+  unsigned int smallest_divergence_som_sequence_entry_index = 1;
+  double smallest_divergence = ComputeModifiedDivergenceOfSOMSequenceEntry(som_sequence_[1]);
+
+  for(unsigned int i = 2; i < som_sequence_.size(); ++i){
+    double current_modified_divergence = ComputeModifiedDivergenceOfSOMSequenceEntry(som_sequence_[i]);
+    if(smallest_divergence > current_modified_divergence){
+      smallest_divergence_som_sequence_entry_index = i;
+      smallest_divergence = current_modified_divergence;
+    }
+  }
+
+  return smallest_divergence_som_sequence_entry_index;
+}
+
+double SOMKEAlgorithm::ComputeModifiedDivergenceOfSOMSequenceEntry(const SOMSequenceEntry &entry) {
+  double modified_divergence = entry.kl_divergence;
+
+  modified_divergence *= exp(- beta_ * (data_window_iterator_ - (entry.range.first + entry.range.second) / 2));
+
+  return modified_divergence;
+}
+
+vector<Point> SOMKEAlgorithm::DrawTrainingDataFromWeightsAndVoronoiRegions(const vector<Point> &neuron_weights,
+                                                                           const vector<int> &voronoi_regions){
+
+  std::default_random_engine generator;
+  std::discrete_distribution<int> distribution (voronoi_regions.begin(), voronoi_regions.end());
+
+  vector<Point> training_data = {};
+
+  while(training_data.size() < data_window_size_){
+    training_data.push_back(neuron_weights[distribution(generator)]);
+  }
+
+  return training_data;
+}
+
+vector<Point> SOMKEAlgorithm::GetNeuronWeightsFromEntries(const vector<SOMSequenceEntry> &entries) {
+  vector<Point> neurons_weights = {};
+
+  for(auto entry : entries){
+    for(size_t i = 0; i < entry.net.objects[0].size(); ++i){
+      neurons_weights.push_back(entry.net.objects[0][i].weights);
+    }
+  }
+
+  return neurons_weights;
+}
+
+vector<int> SOMKEAlgorithm::GetVoronoiRegionWeightsFromEntries(const vector<SOMSequenceEntry> &entries) {
+  vector<int> voronoi_regions = {};
+
+  for(auto entry : entries){
+    for(size_t i = 0; i < entry.voronoi_regions.size(); ++i){
+      voronoi_regions.push_back(entry.voronoi_regions[i]);
+    }
+  }
+
+  return voronoi_regions;
+}
+
+
 
 
 

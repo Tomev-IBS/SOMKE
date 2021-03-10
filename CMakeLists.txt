@@ -22,5 +22,5 @@ IF (Boost_FOUND)
 ENDIF()
 
 
-add_executable(SOMKE include/SOMKE/SOMSequence.h src/SOMKEAlgorithm.cpp include/SOMKE/SOMKEAlgorithm.h include/SOMKE/Kernel.h)
+add_executable(SOMKE include/SOMKE/SOMSequenceEntry.h src/SOMKEAlgorithm.cpp include/SOMKE/SOMKEAlgorithm.h include/SOMKE/Kernel.h)
 target_include_directories(SOMKE PUBLIC ${knnl_include})

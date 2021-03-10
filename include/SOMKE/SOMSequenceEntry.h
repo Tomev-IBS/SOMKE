@@ -2,8 +2,8 @@
 // Created by tomev on 07/03/2021.
 //
 
-#ifndef SOMKE_SOMSEQUENCE_H
-#define SOMKE_SOMSEQUENCE_H
+#ifndef SOMKE_SOMSEQUENCEENTRY_H
+#define SOMKE_SOMSEQUENCEENTRY_H
 
 #include <vector>
 #include <neural_net_headers.hpp>
@@ -26,7 +26,7 @@ typedef neural_net::Wtm_training_algorithm<KohonenNetwork, Point, vector<Point>:
 
 using std::pair;
 
-struct SOMSequence{
+struct SOMSequenceEntry{
   public:
     KohonenNetwork net;// SOM
     vector<int> voronoi_regions; // vector of numbers of input data in the Voronoi regions of neurons
@@ -34,4 +34,4 @@ struct SOMSequence{
     pair<int, int> range; // range of windows summarized
 };
 
-#endif //SOMKE_SOMSEQUENCE_H
+#endif //SOMKE_SOMSEQUENCEENTRY_H
