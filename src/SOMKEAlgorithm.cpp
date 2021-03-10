@@ -7,10 +7,10 @@
 
 #include "../include/SOMKE/SOMKEAlgorithm.h"
 
-SOMKEAlgorithm::SOMKEAlgorithm(vector<Point> *divergence_domain, KernelPtr kernel, unsigned int neurons_number,
-                               unsigned int epochs_number, unsigned int data_window_size, unsigned int max_number_of_som_sequences)
+SOMKEAlgorithm::SOMKEAlgorithm(KernelPtr kernel, unsigned int neurons_number,
+                               unsigned int epochs_number, unsigned int data_window_size, unsigned int max_number_of_som_sequences_entries)
   : neurons_number_(neurons_number), epochs_number_(epochs_number), kernel_ptr_(kernel),
-  divergence_domain_(divergence_domain), data_window_size_(data_window_size), max_number_of_som_sequences_(max_number_of_som_sequences)
+   data_window_size_(data_window_size), max_number_of_som_sequences_(max_number_of_som_sequences_entries)
 { }
 
 void SOMKEAlgorithm::PerformStep(Point data_point) {
@@ -18,6 +18,7 @@ void SOMKEAlgorithm::PerformStep(Point data_point) {
 
   if(data_window_.size() == data_window_size_){
     AddNewSOMSequenceEntry(data_window_);
+    UpdateDivergenceDomain();
     data_window_.clear();
   }
 
@@ -72,15 +73,10 @@ void SOMKEAlgorithm::TrainNetwork(KohonenNetwork *net,
   TrainingAlgorithm training_algorithm(training_functional);
 
   for(int epoch = 0; epoch < epochs_number_; ++epoch){
-
-    //std::cout << "Epoch " << epoch << std::endl;
-
     training_algorithm(data_window.begin(), data_window.end(), net);
     training_algorithm.training_functional.generalized_training_weight.network_function.sigma *= 2.0/3.0;
     std::random_shuffle(data_window.begin(), data_window.end());
   }
-
-  //I can modify weights of each neuron via: (*net).objects[0][0].weights = {2.22};
 }
 
 vector<int> SOMKEAlgorithm::ComputeVoronoiRegionWeightsForNeurons(const KohonenNetwork &net, const vector<Point> &data_window) {
@@ -125,12 +121,12 @@ double SOMKEAlgorithm::ComputeDivergenceBetweenSOMSequences(const SOMSequenceEnt
   return ComputeKLDivergenceEstimatorBetweenPDFs(pdf1, pdf2);
 }
 
-vector<double> SOMKEAlgorithm::ComputePDFValuesForDivergenceComputation(const SOMSequenceEntry &som_sequence, vector<Point> *domain) {
+vector<double> SOMKEAlgorithm::ComputePDFValuesForDivergenceComputation(const SOMSequenceEntry &som_sequence, const vector<Point> &domain) {
   vector<double> pdf = {};
 
   // Do note we start from i = 1. This is related to formula (20) from SOMKE work.
-  for(int i = 1; i < domain->size(); ++i){
-    Point pt = {((*domain)[i][0] + (*domain)[i-1][0]) / 2.0}; // 1D assumption!
+  for(int i = 1; i < domain.size(); ++i){
+    Point pt = {(domain[i][0] + domain[i-1][0]) / 2.0}; // 1D assumption!
     pdf.push_back(ComputePDFValueAtPointFromSOMSequence(som_sequence, pt));
   }
 
@@ -155,7 +151,7 @@ double SOMKEAlgorithm::ComputeKLDivergenceEstimatorBetweenPDFs(const vector<doub
   // We will be using Riemann sum approximation, as in the paper.
   double divergence_estimator = 0;
   // We're assuming that the domain has equal ranges and at least 2 points (and 1D).
-  double range_width = (*divergence_domain_)[1][0] - (*divergence_domain_)[0][0];
+  double range_width = divergence_domain_[1][0] - divergence_domain_[0][0];
 
   auto f = [](double p, double q){
     return p * log(p / q);
@@ -310,6 +306,55 @@ double SOMKEAlgorithm::GetValue(Point data_point) {
   }
 
   return value;
+}
+
+vector<double> StripNeuronWeights(const vector<Point> &neuron_weights){
+  vector<double> stripped_neuron_weights = {};
+
+  for(auto weight : neuron_weights){
+    stripped_neuron_weights.push_back(weight[0]); // 1D assumption
+  }
+
+  return stripped_neuron_weights;
+}
+
+double StandardDeviation(const vector<double> &values){
+  if(values.size() < 2){
+    return 0;
+  }
+
+  auto mean = accumulate(values.begin(), values.end(), 0.0) / values.size();
+  auto squares_sum = inner_product(values.begin(), values.end(), values.begin(), 0.0);
+
+  return sqrt(squares_sum / values.size() - pow(mean, 2));
+}
+
+void SOMKEAlgorithm::UpdateDivergenceDomain() {
+
+  divergence_domain_ = {};
+
+  if(som_sequence_.empty()){
+    return;
+  }
+
+  auto neuron_weights = GetNeuronWeightsFromEntries(som_sequence_);
+  auto stripped_neuron_weights = StripNeuronWeights(neuron_weights);
+
+  auto st_dev = StandardDeviation(stripped_neuron_weights);
+  auto min_weight = *(std::min_element(stripped_neuron_weights.begin(), stripped_neuron_weights.end()));
+  auto max_weight = *(std::max_element(stripped_neuron_weights.begin(), stripped_neuron_weights.end()));
+
+  auto domain_min = min_weight - 5 * st_dev;
+  auto domain_max = max_weight + 5 * st_dev;
+
+  auto step_size = (domain_max - domain_min) / divergence_domain_points_number;
+
+  divergence_domain_.push_back({domain_min});
+
+  while(divergence_domain_.size() < divergence_domain_points_number){
+    divergence_domain_.push_back({divergence_domain_.back()[0] + step_size}); // 1D assumption
+  }
+
 }
 
 

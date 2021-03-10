@@ -15,12 +15,14 @@ class SOMKEAlgorithm {
    */
   public:
 
-    SOMKEAlgorithm(vector<Point> *divergence_domain, KernelPtr kernel, unsigned int neurons_number = 100,
-                   unsigned int epochs_number = 3000, unsigned int data_window_size = 500, unsigned int max_number_of_som_sequences = 1);
+    SOMKEAlgorithm(KernelPtr kernel, unsigned int neurons_number = 100, unsigned int epochs_number = 100,
+                   unsigned int data_window_size = 500, unsigned int max_number_of_som_sequences_entries = 1);
     void PerformStep(Point data_point);
     double GetValue(Point data_point);
 
-  private:
+    vector<Point> divergence_domain_;
+
+  protected:
 
     std::vector<SOMSequenceEntry> som_sequence_;
     int data_window_iterator_ = 0;
@@ -33,7 +35,8 @@ class SOMKEAlgorithm {
     unsigned int max_number_of_som_sequences_ = 0;
 
     KernelPtr kernel_ptr_;
-    vector<Point> *divergence_domain_;
+
+    size_t divergence_domain_points_number = 1001;
 
     double beta_ = 0; // Rate of increased probability of older entries merge
 
@@ -42,9 +45,10 @@ class SOMKEAlgorithm {
     void TrainNetwork(KohonenNetwork *net, vector<Point> data_window);
     vector<int> ComputeVoronoiRegionWeightsForNeurons(const KohonenNetwork &net, const vector<Point> &data_window);
     double ComputeDivergenceBetweenSOMSequences(const SOMSequenceEntry &som_sequence1, const SOMSequenceEntry &som_sequence2);
-    vector<double> ComputePDFValuesForDivergenceComputation(const SOMSequenceEntry &som_sequence, vector<Point> *domain);
+    vector<double> ComputePDFValuesForDivergenceComputation(const SOMSequenceEntry &som_sequence, const vector<Point> &domain);
     double ComputePDFValueAtPointFromSOMSequence(const SOMSequenceEntry &som_sequence, const Point &pt);
     double ComputeKLDivergenceEstimatorBetweenPDFs(const vector<double> &pdf1, const vector<double> &pdf2);
+    void UpdateDivergenceDomain();
 
     void MergeMostSimilarSOMSequenceEntries();
     unsigned int FindIndexOfSOMSequenceEntryWithLowestModifiedDivergence();
