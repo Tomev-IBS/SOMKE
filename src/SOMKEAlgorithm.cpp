@@ -295,6 +295,23 @@ vector<int> SOMKEAlgorithm::GetVoronoiRegionWeightsFromEntries(const vector<SOMS
   return voronoi_regions;
 }
 
+double SOMKEAlgorithm::GetValue(Point data_point) {
+
+  auto neuron_weights = GetNeuronWeightsFromEntries(som_sequence_);
+  auto voronoi_region_weights = GetVoronoiRegionWeightsFromEntries(som_sequence_);
+
+  auto voronoi_region_weights_sum = std::accumulate(voronoi_region_weights.begin(), voronoi_region_weights.end(), 0);
+
+  double value = 0;
+
+  for(size_t i; i < neuron_weights.size(); ++i){
+    auto pt = {data_point[0] - neuron_weights[i][0]}; // 1D assumption
+    value += voronoi_region_weights[i] * kernel_ptr_->GetValue(pt) / voronoi_region_weights_sum;
+  }
+
+  return value;
+}
+
 
 
 

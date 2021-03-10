@@ -18,7 +18,7 @@ class SOMKEAlgorithm {
     SOMKEAlgorithm(vector<Point> *divergence_domain, KernelPtr kernel, unsigned int neurons_number = 100,
                    unsigned int epochs_number = 3000, unsigned int data_window_size = 500, unsigned int max_number_of_som_sequences = 1);
     void PerformStep(Point data_point);
-
+    double GetValue(Point data_point);
 
   private:
 
