@@ -7,6 +7,27 @@
 
 #include "../include/SOMKE/SOMKEAlgorithm.h"
 
+vector<double> StripPoints(const vector<Point> &points){
+  vector<double> stripped_points = {};
+
+  for(auto point : points){
+    stripped_points.push_back(point[0]); // 1D assumption
+  }
+
+  return stripped_points;
+}
+
+double StandardDeviation(const vector<double> &values){
+  if(values.size() < 2){
+    return 0;
+  }
+
+  auto mean = accumulate(values.begin(), values.end(), 0.0) / values.size();
+  auto squares_sum = inner_product(values.begin(), values.end(), values.begin(), 0.0);
+
+  return sqrt(squares_sum / values.size() - pow(mean, 2));
+}
+
 SOMKEAlgorithm::SOMKEAlgorithm(KernelPtr kernel, unsigned int neurons_number,
                                unsigned int epochs_number, unsigned int data_window_size, unsigned int max_number_of_som_sequences_entries)
   : neurons_number_(neurons_number), epochs_number_(epochs_number), kernel_ptr_(kernel),
@@ -40,6 +61,8 @@ void SOMKEAlgorithm::AddNewSOMSequenceEntry(vector<Point> data_window) {
 
   som_sequence_.back().voronoi_regions = ComputeVoronoiRegionWeightsForNeurons(som_sequence_.back().net, data_window);
   som_sequence_.back().range = std::pair<int, int>(data_window_iterator_, data_window_iterator_);
+
+  som_sequence_.back().bandwidth = ComputeBandwidth(data_window);
 
   som_sequence_.back().kl_divergence = 0;
 
@@ -127,20 +150,20 @@ vector<double> SOMKEAlgorithm::ComputePDFValuesForDivergenceComputation(const SO
   // Do note we start from i = 1. This is related to formula (20) from SOMKE work.
   for(int i = 1; i < domain.size(); ++i){
     Point pt = {(domain[i][0] + domain[i-1][0]) / 2.0}; // 1D assumption!
-    pdf.push_back(ComputePDFValueAtPointFromSOMSequence(som_sequence, pt));
+    pdf.push_back(ComputePDFValueAtPointFromSOMSequenceEntry(som_sequence, pt));
   }
 
   return pdf;
 }
 
-double SOMKEAlgorithm::ComputePDFValueAtPointFromSOMSequence(const SOMSequenceEntry &som_sequence, const Point &pt) {
+double SOMKEAlgorithm::ComputePDFValueAtPointFromSOMSequenceEntry(const SOMSequenceEntry &entry, const Point &pt) {
 
   double pdf_value = 0;
-  int cs_sum = std::accumulate(som_sequence.voronoi_regions.begin(), som_sequence.voronoi_regions.end(), 0);
+  int cs_sum = std::accumulate(entry.voronoi_regions.begin(), entry.voronoi_regions.end(), 0);
 
-  for(size_t i = 0; i < som_sequence.voronoi_regions.size(); ++i){
-    Point point = {pt[0] - som_sequence.net.objects[0][i].weights[0]}; // Assuming 1D
-    pdf_value += som_sequence.voronoi_regions[i] * kernel_ptr_->GetValue(point) / cs_sum;
+  for(size_t i = 0; i < entry.voronoi_regions.size(); ++i){
+    Point point = {(pt[0] - entry.net.objects[0][i].weights[0]) / entry.bandwidth}; // Assuming 1D
+    pdf_value += entry.voronoi_regions[i] / entry.bandwidth * kernel_ptr_->GetValue(point) / cs_sum;
   }
 
   return pdf_value;
@@ -206,6 +229,8 @@ void SOMKEAlgorithm::MergeMostSimilarSOMSequenceEntries() {
 
     merged_entry.voronoi_regions[closest_neuron_index] += voronoi_region_weights[j];
   }
+
+  merged_entry.bandwidth = ComputeBandwidth(data_window);
 
   merged_entry.kl_divergence = 0;
 
@@ -295,38 +320,26 @@ double SOMKEAlgorithm::GetValue(Point data_point) {
 
   auto neuron_weights = GetNeuronWeightsFromEntries(som_sequence_);
   auto voronoi_region_weights = GetVoronoiRegionWeightsFromEntries(som_sequence_);
+  auto bandwidths = GetBandwidthsFromEntries(som_sequence_);
 
   auto voronoi_region_weights_sum = std::accumulate(voronoi_region_weights.begin(), voronoi_region_weights.end(), 0);
 
   double value = 0;
+  int bandwidth_index = -1;
+  double current_bandwidth = 1;
 
   for(size_t i; i < neuron_weights.size(); ++i){
-    auto pt = {data_point[0] - neuron_weights[i][0]}; // 1D assumption
-    value += voronoi_region_weights[i] * kernel_ptr_->GetValue(pt) / voronoi_region_weights_sum;
+
+    if(i % neurons_number_ == 0){
+      ++bandwidth_index;
+      current_bandwidth = bandwidths[bandwidth_index];
+    }
+
+    auto pt = {(data_point[0] - neuron_weights[i][0]) / current_bandwidth}; // 1D assumption
+    value += voronoi_region_weights[i] / current_bandwidth * kernel_ptr_->GetValue(pt) / voronoi_region_weights_sum;
   }
 
   return value;
-}
-
-vector<double> StripNeuronWeights(const vector<Point> &neuron_weights){
-  vector<double> stripped_neuron_weights = {};
-
-  for(auto weight : neuron_weights){
-    stripped_neuron_weights.push_back(weight[0]); // 1D assumption
-  }
-
-  return stripped_neuron_weights;
-}
-
-double StandardDeviation(const vector<double> &values){
-  if(values.size() < 2){
-    return 0;
-  }
-
-  auto mean = accumulate(values.begin(), values.end(), 0.0) / values.size();
-  auto squares_sum = inner_product(values.begin(), values.end(), values.begin(), 0.0);
-
-  return sqrt(squares_sum / values.size() - pow(mean, 2));
 }
 
 void SOMKEAlgorithm::UpdateDivergenceDomain() {
@@ -338,7 +351,7 @@ void SOMKEAlgorithm::UpdateDivergenceDomain() {
   }
 
   auto neuron_weights = GetNeuronWeightsFromEntries(som_sequence_);
-  auto stripped_neuron_weights = StripNeuronWeights(neuron_weights);
+  auto stripped_neuron_weights = StripPoints(neuron_weights);
 
   auto st_dev = StandardDeviation(stripped_neuron_weights);
   auto min_weight = *(std::min_element(stripped_neuron_weights.begin(), stripped_neuron_weights.end()));
@@ -355,6 +368,23 @@ void SOMKEAlgorithm::UpdateDivergenceDomain() {
     divergence_domain_.push_back({divergence_domain_.back()[0] + step_size}); // 1D assumption
   }
 
+}
+
+double SOMKEAlgorithm::ComputeBandwidth(const vector<Point> &data_window) {
+  double bandwidth = 1.06;
+  bandwidth *= StandardDeviation(StripPoints(data_window));
+  bandwidth *= pow(data_window.size(), -0.2);
+  return bandwidth;
+}
+
+vector<double> SOMKEAlgorithm::GetBandwidthsFromEntries(const vector<SOMSequenceEntry> &entries) {
+  vector<double> bandwidths = {};
+
+  for(auto entry : entries){
+    bandwidths.push_back(entry.bandwidth);
+  }
+
+  return bandwidths;
 }
 
 

@@ -32,6 +32,7 @@ struct SOMSequenceEntry{
     vector<int> voronoi_regions; // vector of numbers of input data in the Voronoi regions of neurons
     double kl_divergence;// kl divergence
     pair<int, int> range; // range of windows summarized
+    double bandwidth = 1;
 };
 
 #endif //SOMKE_SOMSEQUENCEENTRY_H

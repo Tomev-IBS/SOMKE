@@ -46,15 +46,17 @@ class SOMKEAlgorithm {
     vector<int> ComputeVoronoiRegionWeightsForNeurons(const KohonenNetwork &net, const vector<Point> &data_window);
     double ComputeDivergenceBetweenSOMSequences(const SOMSequenceEntry &som_sequence1, const SOMSequenceEntry &som_sequence2);
     vector<double> ComputePDFValuesForDivergenceComputation(const SOMSequenceEntry &som_sequence, const vector<Point> &domain);
-    double ComputePDFValueAtPointFromSOMSequence(const SOMSequenceEntry &som_sequence, const Point &pt);
+    double ComputePDFValueAtPointFromSOMSequenceEntry(const SOMSequenceEntry &entry, const Point &pt);
     double ComputeKLDivergenceEstimatorBetweenPDFs(const vector<double> &pdf1, const vector<double> &pdf2);
     void UpdateDivergenceDomain();
+    double ComputeBandwidth(const vector<Point> &data_window);
 
     void MergeMostSimilarSOMSequenceEntries();
     unsigned int FindIndexOfSOMSequenceEntryWithLowestModifiedDivergence();
     double ComputeModifiedDivergenceOfSOMSequenceEntry(const SOMSequenceEntry &entry);
     vector<Point> GetNeuronWeightsFromEntries(const vector<SOMSequenceEntry> &entries);
     vector<int> GetVoronoiRegionWeightsFromEntries(const vector<SOMSequenceEntry> &entries);
+    vector<double> GetBandwidthsFromEntries(const vector<SOMSequenceEntry> &entries);
     vector<Point> DrawTrainingDataFromWeightsAndVoronoiRegions(const vector<Point> &neuron_weights,
                                                                const vector<int> &voronoi_regions);
 
