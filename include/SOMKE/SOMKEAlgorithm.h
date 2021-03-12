@@ -5,8 +5,8 @@
 #ifndef SOMKE_SOMKEALGORITHM_H
 #define SOMKE_SOMKEALGORITHM_H
 
-
 #include "SOMSequenceEntry.h"
+#include "SOMKEMergingStrategy.h"
 #include "Kernel.h"
 
 class SOMKEAlgorithm {
@@ -15,8 +15,8 @@ class SOMKEAlgorithm {
    */
   public:
 
-    SOMKEAlgorithm(KernelPtr kernel, unsigned int neurons_number = 100, unsigned int epochs_number = 100,
-                   unsigned int data_window_size = 500, unsigned int max_number_of_som_sequences_entries = 1);
+    SOMKEAlgorithm(KernelPtr kernel, MergingStrategyPtr merging_strategy, unsigned int neurons_number = 100,
+                   unsigned int epochs_number = 100, unsigned int data_window_size = 500);
     void PerformStep(Point data_point);
     double GetValue(Point data_point);
 
@@ -32,13 +32,13 @@ class SOMKEAlgorithm {
     neural_net::External_randomize randomizer_;
     unsigned int neurons_number_ = 0;
     unsigned int epochs_number_ = 0;
-    unsigned int max_number_of_som_sequences_ = 0;
 
     KernelPtr kernel_ptr_;
+    MergingStrategyPtr merging_strategy_ptr_;
 
     size_t divergence_domain_points_number = 1001;
 
-    double beta_ = 0; // Rate of increased probability of older entries merge
+
 
     void AddNewSOMSequenceEntry(vector<Point> data_window);
     KohonenNetwork GenerateNetwork(vector<Point> data_window);
@@ -51,9 +51,7 @@ class SOMKEAlgorithm {
     void UpdateDivergenceDomain();
     double ComputeBandwidth(const vector<Point> &data_window);
 
-    void MergeMostSimilarSOMSequenceEntries();
-    unsigned int FindIndexOfSOMSequenceEntryWithLowestModifiedDivergence();
-    double ComputeModifiedDivergenceOfSOMSequenceEntry(const SOMSequenceEntry &entry);
+    void MergeAdequateSOMSequenceEntries();
     vector<Point> GetNeuronWeightsFromEntries(const vector<SOMSequenceEntry> &entries);
     vector<int> GetVoronoiRegionWeightsFromEntries(const vector<SOMSequenceEntry> &entries);
     vector<double> GetBandwidthsFromEntries(const vector<SOMSequenceEntry> &entries);

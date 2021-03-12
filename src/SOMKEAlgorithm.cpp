@@ -28,11 +28,14 @@ double StandardDeviation(const vector<double> &values){
   return sqrt(squares_sum / values.size() - pow(mean, 2));
 }
 
-SOMKEAlgorithm::SOMKEAlgorithm(KernelPtr kernel, unsigned int neurons_number,
-                               unsigned int epochs_number, unsigned int data_window_size, unsigned int max_number_of_som_sequences_entries)
+SOMKEAlgorithm::SOMKEAlgorithm(KernelPtr kernel, MergingStrategyPtr merging_strategy, unsigned int neurons_number,
+                               unsigned int epochs_number, unsigned int data_window_size)
   : neurons_number_(neurons_number), epochs_number_(epochs_number), kernel_ptr_(kernel),
-   data_window_size_(data_window_size), max_number_of_som_sequences_(max_number_of_som_sequences_entries)
-{ }
+  data_window_size_(data_window_size)
+{
+  merging_strategy_ptr_ = merging_strategy;
+  merging_strategy_ptr_->SetDataWindowIterator(&data_window_iterator_);
+}
 
 void SOMKEAlgorithm::PerformStep(Point data_point) {
   data_window_.push_back(data_point);
@@ -44,8 +47,8 @@ void SOMKEAlgorithm::PerformStep(Point data_point) {
   }
 
   // We're implementing only fixed memory strategy for now.
-  if(som_sequence_.size() > max_number_of_som_sequences_){
-    MergeMostSimilarSOMSequenceEntries();
+  while(merging_strategy_ptr_->ShouldMergeBePerformed(som_sequence_)){
+    MergeAdequateSOMSequenceEntries();
   }
 
 }
@@ -187,9 +190,9 @@ double SOMKEAlgorithm::ComputeKLDivergenceEstimatorBetweenPDFs(const vector<doub
   return divergence_estimator;
 }
 
-void SOMKEAlgorithm::MergeMostSimilarSOMSequenceEntries() {
+void SOMKEAlgorithm::MergeAdequateSOMSequenceEntries() {
 
-  auto i = FindIndexOfSOMSequenceEntryWithLowestModifiedDivergence();
+  auto i = merging_strategy_ptr_->FindEntryToMerge(som_sequence_);
 
   SOMSequenceEntry merged_entry;
 
@@ -253,29 +256,11 @@ void SOMKEAlgorithm::MergeMostSimilarSOMSequenceEntries() {
 
 }
 
-unsigned int SOMKEAlgorithm::FindIndexOfSOMSequenceEntryWithLowestModifiedDivergence() {
-
-  unsigned int smallest_divergence_som_sequence_entry_index = 1;
-  double smallest_divergence = ComputeModifiedDivergenceOfSOMSequenceEntry(som_sequence_[1]);
-
-  for(unsigned int i = 2; i < som_sequence_.size(); ++i){
-    double current_modified_divergence = ComputeModifiedDivergenceOfSOMSequenceEntry(som_sequence_[i]);
-    if(smallest_divergence > current_modified_divergence){
-      smallest_divergence_som_sequence_entry_index = i;
-      smallest_divergence = current_modified_divergence;
-    }
-  }
-
-  return smallest_divergence_som_sequence_entry_index;
-}
-
+/*
 double SOMKEAlgorithm::ComputeModifiedDivergenceOfSOMSequenceEntry(const SOMSequenceEntry &entry) {
-  double modified_divergence = entry.kl_divergence;
 
-  modified_divergence *= exp(- beta_ * (data_window_iterator_ - (entry.range.first + entry.range.second) / 2));
-
-  return modified_divergence;
 }
+*/
 
 vector<Point> SOMKEAlgorithm::DrawTrainingDataFromWeightsAndVoronoiRegions(const vector<Point> &neuron_weights,
                                                                            const vector<int> &voronoi_regions){
@@ -371,6 +356,7 @@ void SOMKEAlgorithm::UpdateDivergenceDomain() {
 }
 
 double SOMKEAlgorithm::ComputeBandwidth(const vector<Point> &data_window) {
+  // Assuming normal kernel!
   double bandwidth = 1.06;
   bandwidth *= StandardDeviation(StripPoints(data_window));
   bandwidth *= pow(data_window.size(), -0.2);
