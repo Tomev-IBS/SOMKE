@@ -40,8 +40,6 @@ class SOMKEAlgorithm {
     double tau2_;
     double m_ = 0.5; // For 1D data
 
-
-
     void AddNewSOMSequenceEntry(vector<Point> data_window);
     KohonenNetwork GenerateNetwork(vector<Point> data_window);
     void TrainNetwork(KohonenNetwork *net, vector<Point> data_window);

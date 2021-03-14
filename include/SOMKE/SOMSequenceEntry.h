@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <neural_net_headers.hpp>
+#include "wtm_localized_training_algorithm.h"
 
 using std::vector;
 typedef std::vector<double> Point;
@@ -20,7 +21,9 @@ typedef neural_net::Gauss_function<double, double, ::boost::int32_t> SpaceFuncto
 typedef neural_net::Gauss_function<::boost::int32_t, Point::value_type , ::boost::int32_t> NetFunctor;
 typedef neural_net::Classic_training_weight<Point, ::boost::int32_t, NetFunctor, SpaceFunctor, Topology, DistanceFunction, ::boost::int32_t > TrainingWeight;
 typedef neural_net::Wtm_classical_training_functional<Point, double, ::boost::int32_t, ::boost::int32_t, TrainingWeight> TrainingFunctional;
-typedef neural_net::Wtm_training_algorithm<KohonenNetwork, Point, vector<Point>::iterator, TrainingFunctional, size_t> TrainingAlgorithm;
+//typedef neural_net::Wtm_training_algorithm<KohonenNetwork, Point, vector<Point>::iterator, TrainingFunctional, size_t> TrainingAlgorithm;
+typedef neural_net::Wtm_localized_training_algorithm<KohonenNetwork, Point, vector<Point>::iterator, TrainingFunctional, size_t> TrainingAlgorithm;
+
 
 #include <utility>
 
