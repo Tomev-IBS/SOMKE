@@ -16,7 +16,8 @@ class SOMKEAlgorithm {
   public:
 
     SOMKEAlgorithm(KernelPtr kernel, MergingStrategyPtr merging_strategy, unsigned int neurons_number = 100,
-                   unsigned int epochs_number = 100, unsigned int data_window_size = 500);
+                   unsigned int epochs_number = 100, unsigned int data_window_size = 500, const double &sigma0 = 25,
+                   const double &eta0 = 3, const double &tau2 = 1000);
     void PerformStep(Point data_point);
     double GetValue(Point data_point, const vector<int> &ranges = {});
     vector<Point> divergence_domain_;
@@ -33,6 +34,14 @@ class SOMKEAlgorithm {
     KernelPtr kernel_ptr_;
     MergingStrategyPtr merging_strategy_ptr_;
     size_t divergence_domain_points_number = 1001;
+    double sigma0_;
+    double tau1_;
+    double eta0_;
+    double tau2_;
+    double m_ = 0.5; // For 1D data
+
+
+
     void AddNewSOMSequenceEntry(vector<Point> data_window);
     KohonenNetwork GenerateNetwork(vector<Point> data_window);
     void TrainNetwork(KohonenNetwork *net, vector<Point> data_window);

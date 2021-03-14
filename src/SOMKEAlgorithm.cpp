@@ -30,77 +30,82 @@ double StandardDeviation(const vector<double> &values) {
 }
 
 SOMKEAlgorithm::SOMKEAlgorithm(KernelPtr kernel, MergingStrategyPtr merging_strategy, unsigned int neurons_number,
-                               unsigned int epochs_number, unsigned int data_window_size)
-    : neurons_number_(neurons_number), epochs_number_(epochs_number), kernel_ptr_(kernel),
-      data_window_size_(data_window_size) {
+                               unsigned int epochs_number, unsigned int data_window_size, const double &sigma0,
+                               const double &eta0, const double &tau2)
+    : neurons_number_(neurons_number), epochs_number_(epochs_number), kernel_ptr_(kernel), eta0_(eta0), tau2_(tau2),
+      data_window_size_(data_window_size), sigma0_(sigma0) {
   merging_strategy_ptr_ = merging_strategy;
   merging_strategy_ptr_->SetDataWindowIterator(&data_window_iterator_);
-}
-
-void SOMKEAlgorithm::PerformStep(Point data_point) {
-  data_window_.push_back(data_point);
-
-  if(data_window_.size() == data_window_size_) {
-    AddNewSOMSequenceEntry(data_window_);
-    UpdateDivergenceDomain();
-    data_window_.clear();
+  tau1_ = 1000 / log(sigma0);
   }
 
-  // We're implementing only fixed memory strategy for now.
-  while(merging_strategy_ptr_->ShouldMergeBePerformed(som_sequence_)) {
-    MergeAdequateSOMSequenceEntries();
+  void SOMKEAlgorithm::PerformStep(Point data_point) {
+    data_window_.push_back(data_point);
+
+    if(data_window_.size() == data_window_size_) {
+      AddNewSOMSequenceEntry(data_window_);
+      UpdateDivergenceDomain();
+      data_window_.clear();
+    }
+
+    // We're implementing only fixed memory strategy for now.
+    while(merging_strategy_ptr_->ShouldMergeBePerformed(som_sequence_)) {
+      MergeAdequateSOMSequenceEntries();
+    }
+
   }
 
-}
+  void SOMKEAlgorithm::AddNewSOMSequenceEntry(vector<Point> data_window) {
 
-void SOMKEAlgorithm::AddNewSOMSequenceEntry(vector<Point> data_window) {
+    ++data_window_iterator_;
 
-  ++data_window_iterator_;
+    som_sequence_.push_back(SOMSequenceEntry());
 
-  som_sequence_.push_back(SOMSequenceEntry());
+    som_sequence_.back().net = GenerateNetwork(data_window);
+    TrainNetwork(&(som_sequence_.back().net), data_window);
 
-  som_sequence_.back().net = GenerateNetwork(data_window);
-  TrainNetwork(&(som_sequence_.back().net), data_window);
+    som_sequence_.back().voronoi_regions = ComputeVoronoiRegionWeightsForNeurons(som_sequence_.back().net, data_window);
+    som_sequence_.back().range = std::pair<int, int>(data_window_iterator_, data_window_iterator_);
 
-  som_sequence_.back().voronoi_regions = ComputeVoronoiRegionWeightsForNeurons(som_sequence_.back().net, data_window);
-  som_sequence_.back().range = std::pair<int, int>(data_window_iterator_, data_window_iterator_);
+    som_sequence_.back().bandwidth = ComputeBandwidth(data_window);
 
-  som_sequence_.back().bandwidth = ComputeBandwidth(data_window);
+    som_sequence_.back().kl_divergence = 0;
 
-  som_sequence_.back().kl_divergence = 0;
-
-  if(som_sequence_.size() > 1) {
-    int i = som_sequence_.size() - 1;
-    som_sequence_.back().kl_divergence = ComputeDivergenceBetweenSOMSequences(som_sequence_[i],
-                                                                              som_sequence_[i - 1]);
+    if(som_sequence_.size() > 1) {
+      int i = som_sequence_.size() - 1;
+      som_sequence_.back().kl_divergence = ComputeDivergenceBetweenSOMSequences(som_sequence_[i],
+                                                                                som_sequence_[i - 1]);
+    }
   }
-}
 
-KohonenNetwork SOMKEAlgorithm::GenerateNetwork(vector<Point> data_window) {
+  KohonenNetwork SOMKEAlgorithm::GenerateNetwork(vector<Point> data_window) {
 
-  KohonenNetwork net;
-  DistanceFunction distance_function;
-  ActivationFunction activation_function(2.0, 1);
+    KohonenNetwork net;
+    DistanceFunction distance_function;
+    ActivationFunction activation_function(2.0, 1);
 
-  neural_net::generate_kohonen_network(1, neurons_number_, activation_function, distance_function, data_window,
-                                       net, randomizer_);
+    neural_net::generate_kohonen_network(1, neurons_number_, activation_function, distance_function, data_window,
+                                         net, randomizer_);
 
-  return net;
-}
+    return net;
+  }
 
-void SOMKEAlgorithm::TrainNetwork(KohonenNetwork *net,
-                                  vector<Point> data_window) {
-  Topology topology;
-  SpaceFunctor space_functor(100, 1);
-  NetFunctor net_functor(10, 1);
-  DistanceFunction distance_function;
-  TrainingWeight weight(net_functor, space_functor, topology, distance_function);
-  TrainingFunctional training_functional(weight, 0.3);
-  TrainingAlgorithm training_algorithm(training_functional);
+  void SOMKEAlgorithm::TrainNetwork(KohonenNetwork *net,
+                                    vector<Point> data_window) {
+    Topology topology;
+    SpaceFunctor space_functor(100, 1);
+    NetFunctor net_functor(10, 1);
+    DistanceFunction distance_function;
+    TrainingWeight weight(net_functor, space_functor, topology, distance_function);
+    TrainingFunctional training_functional(weight, 0.3);
+    TrainingAlgorithm training_algorithm(training_functional);
 
-  for(int epoch = 0; epoch < epochs_number_; ++epoch) {
-    training_algorithm(data_window.begin(), data_window.end(), net);
-    training_algorithm.training_functional.generalized_training_weight.network_function.sigma *= 2.0 / 3.0;
+    for(int epoch = 0; epoch < epochs_number_; ++epoch) {
+      training_algorithm(data_window.begin(), data_window.end(), net);
+      training_algorithm.training_functional.generalized_training_weight.network_function.sigma =
+          sigma0_ * exp(- epoch / tau1_);
+      double eta = eta0_ * exp(- epoch / tau2_);
+      training_algorithm.training_functional.parameter = eta;
     std::random_shuffle(data_window.begin(), data_window.end());
   }
 }
