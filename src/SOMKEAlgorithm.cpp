@@ -104,8 +104,8 @@ SOMKEAlgorithm::SOMKEAlgorithm(KernelPtr kernel, MergingStrategyPtr merging_stra
       training_algorithm(data_window.begin(), data_window.end(), net);
       training_algorithm.training_functional.generalized_training_weight.network_function.sigma =
           sigma0_ * exp(- epoch / tau1_);
-      double eta = eta0_ * exp(- epoch / tau2_);
-      training_algorithm.training_functional.parameter = eta;
+      //double eta = eta0_ * exp(- epoch / tau2_);
+      //training_algorithm.training_functional.parameter = eta;
     std::random_shuffle(data_window.begin(), data_window.end());
   }
 }

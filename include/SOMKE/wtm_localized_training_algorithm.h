@@ -145,7 +145,7 @@ namespace neural_net {
                 data_begin, data_end,
                 ::boost::bind
                     (
-                        &Wtm_training_algorithm
+                        &Wtm_localized_training_algorithm
                             <
                                 Network_type,
                                 Value_type,
@@ -195,6 +195,8 @@ namespace neural_net {
         ::boost::int32_t r_counter = 0;//network->objects.size();
         ::boost::int32_t c_counter = 0;//network->objects[0].size();
 
+        auto max_weights = network->objects.begin()->begin()->weights;
+
         for(r_iter = network->objects.begin();
             r_iter != network->objects.end();
             ++r_iter
@@ -208,6 +210,7 @@ namespace neural_net {
               index_1 = r_counter;
               index_2 = c_counter;
               max_result = tmp_result;
+              max_weights = c_iter->weights;
             }
             ++c_counter;
           }
@@ -222,7 +225,7 @@ namespace neural_net {
         double m = 0.5;
         double d = 1.0;
         double delta_t = 1.0;
-        double weight_value_difference = fabs(value[0] - network->objects[index_1][index_2]->weights[0]);
+        double weight_value_difference = fabs(value[0] - max_weights[0]);
         // End 1d assumption
 
         double parameter_modifier = pow(1 / (delta_t * pow(weight_value_difference, d)), m);
