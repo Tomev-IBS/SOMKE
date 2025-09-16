@@ -2,8 +2,8 @@
 // Created by tomev on 12/03/2021.
 //
 
-#ifndef KERDEP_SOMKEMERGINGSTRATEGY_H
-#define KERDEP_SOMKEMERGINGSTRATEGY_H
+#ifndef DEDSTA_SOMKEMERGINGSTRATEGY_H
+#define DEDSTA_SOMKEMERGINGSTRATEGY_H
 
 #include "SOMSequenceEntry.h"
 
@@ -16,4 +16,4 @@ class SOMKEMergingStrategy{
 
 typedef std::shared_ptr<SOMKEMergingStrategy> MergingStrategyPtr;
 
-#endif //KERDEP_SOMKEMERGINGSTRATEGY_H
+#endif //DEDSTA_SOMKEMERGINGSTRATEGY_H
